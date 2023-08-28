@@ -20,12 +20,17 @@ This is a template for handling embedding vectors per time frame.
     # Convert embeddings per time frames into a single embedding vector: [B,D,T] -> [B,D]
     embeddings = forward(embedding_frames)
 """
+import logging
 
-from evar.common import (logging, nn, torch, np, EasyDict)
-from evar.utils.calculations import RunningStats
-from evar.model_utils import (mean_max_pooling, mean_pooling, max_pooling,
+from easydict import EasyDict
+
+import torch
+import torch.nn as nn
+
+from .utils.calculations import RunningStats
+from .model_utils import (mean_max_pooling, mean_pooling, max_pooling,
     MLP, initialize_layers, set_layers_trainable, show_layers_trainable)
-import nnAudio.Spectrogram
+import nnAudio.features
 
 
 class BaseAudioRepr(nn.Module):
@@ -58,7 +63,7 @@ class BaseAudioRepr(nn.Module):
 class ToLogMelSpec(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.to_spec = nnAudio.Spectrogram.MelSpectrogram(
+        self.to_spec = nnAudio.features.MelSpectrogram(
             sr=cfg.sample_rate,
             n_fft=cfg.n_fft,
             win_length=cfg.window_size,

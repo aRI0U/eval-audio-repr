@@ -104,4 +104,4 @@ def create_dataloader(cfg, fold=1, seed=42, batch_size=None, always_one_hot=Fals
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_memory,
                                            num_workers=multiprocessing.cpu_count())
 
-    return (train_loader, valid_loader, test_loader, train_dataset.multi_label)
+    return train_loader, valid_loader, test_loader, train_dataset.multi_label

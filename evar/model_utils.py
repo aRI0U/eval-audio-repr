@@ -33,7 +33,7 @@ def load_pretrained_weights(model, pathname, model_key='model', strict=True):
     # model's parameter only
     def find_model_prm(k):
         for name in children:
-            if name in k: # ex) "conv_block1" in "model.conv_block1.conv1.weight"
+            if name in k:  # ex) "conv_block1" in "model.conv_block1.conv1.weight"
                 return k
         return None
 
@@ -102,7 +102,7 @@ class MLP(nn.Module):
 
 
 def mean_max_pooling(frame_embeddings, dim=-1):
-    assert len(frame_embeddings.shape) == 3 # Batch,Feature Dimension,Time
+    assert len(frame_embeddings.shape) == 3  # Batch,Feature Dimension,Time
     (x1, _) = torch.max(frame_embeddings, dim=dim)
     x2 = torch.mean(frame_embeddings, dim=dim)
     x = x1 + x2
@@ -110,12 +110,12 @@ def mean_max_pooling(frame_embeddings, dim=-1):
 
 
 def mean_pooling(frame_embeddings, dim=-1):
-    assert len(frame_embeddings.shape) == 3 # Batch,Feature Dimension,Time
+    assert len(frame_embeddings.shape) == 3  # Batch,Feature Dimension,Time
     x2 = torch.mean(frame_embeddings, dim=dim)
     return x2
 
 
 def max_pooling(frame_embeddings, dim=-1):
-    assert len(frame_embeddings.shape) == 3 # Batch,Feature Dimension,Time
+    assert len(frame_embeddings.shape) == 3  # Batch,Feature Dimension,Time
     (x1, _) = torch.max(frame_embeddings, dim=dim)
     return x1

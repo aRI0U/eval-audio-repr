@@ -33,15 +33,22 @@ FLAGS
     --step=STEP
         Default: '1pass'
 """
+import logging
+from pathlib import Path
+from typing import Any, Dict
 
-from evar.common import (np, pd, Path, load_yaml_config, complete_cfg, kwarg_cfg, hash_text,
-                         torch, logging, seed_everything, append_to_csv,
+import numpy as np
+from easydict import EasyDict
+from tqdm import tqdm
+
+import torch
+
+from evar.common import (pd, load_yaml_config, complete_cfg, kwarg_cfg, hash_text,
+                         seed_everything, append_to_csv,
                          app_setup_logger, setup_dir, RESULT_DIR, LOG_DIR)
 from evar.data import create_dataloader
 from evar.ds_tasks import get_defs
 import fire
-from tqdm import tqdm
-from pathlib import Path
 from evar.utils.torch_mlp_clf2 import TorchMLPClassifier2
 # Representations
 import evar.ar_spec
@@ -56,6 +63,7 @@ import evar.ar_data2vec
 import evar.ar_hubert
 import evar.ar_wavlm
 import evar.ar_ast
+import evar.ar_ajepa
 import evar.ar_byola
 import evar.ar_byola2
 import evar.ar_data2vec
@@ -75,7 +83,7 @@ def to_embeddings(emb_ar, data_loader, device, _id=None, fold=1, cache=False):
     if len(data_loader) == 0:
         return None, None
 
-    if cache: # Load cache
+    if cache:  # Load cache
         cache_exists, cache_file, cache_gt_file = get_cache_info(data_loader, _id, fold)
         if cache_exists:
             logging.info(f' using cached embeddings: {cache_file.stem}')
@@ -95,7 +103,7 @@ def to_embeddings(emb_ar, data_loader, device, _id=None, fold=1, cache=False):
     else:
         gts = torch.hstack(gts).numpy()
 
-    if cache: # Save cache
+    if cache:  # Save cache
         cache_file.parent.mkdir(exist_ok=True, parents=True)
         np.save(cache_file, embs)
         np.save(cache_gt_file, gts)
@@ -103,7 +111,8 @@ def to_embeddings(emb_ar, data_loader, device, _id=None, fold=1, cache=False):
     return embs, gts
 
 
-def _one_linear_eval(X, y, X_val, y_val, X_test, y_test, hidden_sizes, epochs, early_stop_epochs, lr, classes, standard_scaler, mixup, debug): 
+def _one_linear_eval(X, y, X_val, y_val, X_test, y_test, hidden_sizes, epochs, early_stop_epochs, lr, classes,
+                     standard_scaler, mixup, debug):
     logging.info(f'🚀 Started {"Linear" if hidden_sizes == () else f"MLP with {hidden_sizes}"} evaluation:')
     clf = TorchMLPClassifier2(hidden_layer_sizes=hidden_sizes, max_iter=epochs, learning_rate_init=lr,
                               early_stopping=early_stop_epochs > 0, n_iter_no_change=early_stop_epochs,
@@ -114,10 +123,12 @@ def _one_linear_eval(X, y, X_val, y_val, X_test, y_test, hidden_sizes, epochs, e
     return score, df
 
 
-def make_cfg(config_file, task, options, extras={}, cancel_aug=False, abs_unit_sec=None):
+def make_cfg(config_file, task: str, options, extras={}, cancel_aug: bool = False, abs_unit_sec=None):
     cfg = load_yaml_config(config_file)
     cfg = complete_cfg(cfg, options, no_id=True)
+
     task_metadata, task_data, n_folds, unit_sec, activation, balanced = get_defs(cfg, task)
+
     # cancel augmentation if required
     if cancel_aug:
         cfg.freq_mask = None
@@ -127,6 +138,7 @@ def make_cfg(config_file, task, options, extras={}, cancel_aug=False, abs_unit_s
     # unit_sec can be configured at runtime
     if abs_unit_sec is not None:
         unit_sec = abs_unit_sec
+
     # update some parameters.
     update_options = f'+task_metadata={task_metadata},+task_data={task_data}'
     update_options += f',+unit_samples={int(cfg.sample_rate * unit_sec)}'
@@ -148,8 +160,20 @@ def short_model_desc(model, head_len=5, tail_len=1):
     return '\n'.join(text)
 
 
-def lineareval_downstream(config_file, task, options='', seed=42, lr=None, hidden=(), standard_scaler=True, mixup=False,
-                          epochs=None, early_stop_epochs=None, unit_sec=None, step='1pass'):
+def lineareval_downstream(
+        config_file,
+        task,
+        options='',
+        seed=42,
+        lr=None,
+        hidden=(),
+        standard_scaler=True,
+        mixup=False,
+        epochs=None,
+        early_stop_epochs=None,
+        unit_sec=None,
+        step='1pass'
+):
     cfg, n_folds, _, _ = make_cfg(config_file, task, options, extras={}, abs_unit_sec=unit_sec)
     lr = lr or cfg.lr_lineareval
     epochs = epochs or 200
@@ -160,7 +184,7 @@ def lineareval_downstream(config_file, task, options='', seed=42, lr=None, hidde
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     seed_everything(seed)
-    logpath = app_setup_logger(cfg, level=logging.DEBUG) # Add this when debugging deeper: level=logging.DEBUG
+    logpath = app_setup_logger(cfg, level=logging.DEBUG)  # Add this when debugging deeper: level=logging.DEBUG
 
     scores, ar, emb_ar = [], None, None
     for fold in range(1, n_folds + 1):
@@ -171,7 +195,7 @@ def lineareval_downstream(config_file, task, options='', seed=42, lr=None, hidde
 
         # Make audio representation model.
         if ar is None and step != '2pass_2_train_test':
-            cache_exists, _,_ = get_cache_info(train_loader, cfg.id, fold)
+            cache_exists, _, _ = get_cache_info(train_loader, cfg.id, fold)
             if (not two_pass) or (not cache_exists):
                 ar = eval('evar.'+cfg.audio_repr)(cfg).to(device)
                 ar.precompute(device, train_loader)
@@ -183,7 +207,8 @@ def lineareval_downstream(config_file, task, options='', seed=42, lr=None, hidde
         X_val, y_val = to_embeddings(emb_ar, valid_loader, device, cfg.id, fold=fold, cache=two_pass)
         X_test, y_test = to_embeddings(emb_ar, test_loader, device, cfg.id, fold=fold, cache=two_pass)
 
-        if step == '2pass_1_precompute_only': continue
+        if step == '2pass_1_precompute_only':
+            continue
 
         score, df = _one_linear_eval(X, y, X_val, y_val, X_test, y_test, hidden_sizes=hidden, epochs=epochs,
                                      early_stop_epochs=early_stop_epochs, lr=lr, classes=classes,
@@ -192,7 +217,8 @@ def lineareval_downstream(config_file, task, options='', seed=42, lr=None, hidde
         if n_folds > 1:
             print(f' fold={fold}: {score:.5f}')
 
-    if step == '2pass_1_precompute_only': return
+    if step == '2pass_1_precompute_only':
+        return
 
     mean_score = np.mean(scores)
     re_hashed = hash_text(str(cfg), L=8)
@@ -201,7 +227,7 @@ def lineareval_downstream(config_file, task, options='', seed=42, lr=None, hidde
 
     report = f'Linear evaluation: {cfg.id[:-8]+re_hashed} {task} -> {mean_score:.5f}\n{cfg}\n{score_file}'
     result_df = pd.DataFrame({
-        'representation': [cfg.id.split('_')[-2]], # AR name
+        'representation': [cfg.id.split('_')[-2]],  # AR name
         'task': [task],
         'score': [mean_score],
         'run_id': [re_hashed],

@@ -4,10 +4,10 @@ from evar.common import (pd, np, WORK, METADATA_DIR)
 
 
 _defs = {
-    # folds, unit_sec, activation, data_folder (None if task name is the folder name), balanced training when fine-tining
+    # folds, unit_sec, activation, data_folder (None if task name is the folder name), balanced training when finetuning
     'us8k': [10, 4.0, 'softmax', None, False],
     'esc50': [5, 5.0, 'softmax', None, False],
-    'fsd50k': [1, 7.6358, 'sigmoid', None, False], ## Changed to NOT balanced: to make it the same as PaSST.
+    'fsd50k': [1, 7.6358, 'sigmoid', None, False],  # Changed to NOT balanced: to make it the same as PaSST.
     'fsdnoisy18k': [1, 8.25, 'softmax', None, False],
     'gtzan': [1, 30.0, 'softmax', None, False],
     'nsynth': [1, 4.0, 'softmax', None, False],
@@ -23,7 +23,7 @@ _defs = {
 
 _fs_table = {
     16000: '16k',
-    22000: '22k', # Following COALA that uses 22,000 Hz
+    22000: '22k',  # Following COALA that uses 22,000 Hz
     32000: '32k',
     44100: '44k',
     48000: '48k',
